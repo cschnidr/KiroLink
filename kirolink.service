@@ -1,0 +1,58 @@
+[Unit]
+Description=KiroLink Telegram Bridge
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=kirolink
+Group=kirolink
+WorkingDirectory=/opt/kirolink
+ExecStart=/usr/bin/node dist/index.js
+EnvironmentFile=/opt/kirolink/.env
+Environment=HOME=/var/lib/kirolink
+Restart=on-failure
+RestartSec=5
+
+# Resource limits
+MemoryMax=512M
+# Generous ceiling: kiro-cli spawns a Tokio runtime + scheduled thread pools.
+# 50 was too tight and caused EAGAIN panics in kiro-cli.
+TasksMax=512
+
+# Hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+# ProtectHome=read-only: Kiro can read anything under /home and /root but
+# cannot write. If you need Kiro to edit files under a user's home, either
+# add that path to ReadWritePaths above, or set ProtectHome=false.
+ProtectHome=read-only
+PrivateTmp=true
+# Paths writable by the service. /var/lib/kirolink holds conversation log,
+# audit log, and kiro-cli state. Extend this list if you want Kiro to edit
+# files elsewhere — for example:
+#   ReadWritePaths=/var/lib/kirolink /home/yourname/projects
+# Paths under /home also need ProtectHome to not be blocking — see ProtectHome above.
+# Remember: the kirolink user must also have OS-level write permissions
+# (chown/chmod/ACL or group membership) on anything you list here.
+ReadWritePaths=/var/lib/kirolink
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectKernelLogs=true
+ProtectHostname=true
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+CapabilityBoundingSet=
+# SystemCallFilter removed: was killing the process with SIGSYS on some
+# kernel/Node combos. Other hardening (ProtectSystem, ProtectHome,
+# NoNewPrivileges, CapabilityBoundingSet=, etc.) still provides a strong
+# sandbox. Re-enable with a tested allowlist if needed.
+
+[Install]
+WantedBy=multi-user.target
