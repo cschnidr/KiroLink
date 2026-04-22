@@ -23,7 +23,7 @@ KiroLink is a small Node.js daemon that turns a Telegram bot into a frontend for
 ```bash
 # 1. Create a bot via @BotFather, get your user ID via @userinfobot
 # 2. On your server:
-git clone https://github.com/schnidrc/KiroLink ~/git/KiroLink
+git clone https://github.com/cschnidr/KiroLink ~/git/KiroLink
 cd ~/git/KiroLink && sudo bash install.sh
 # 3. Switch to the service user, install + log in Kiro CLI:
 sudo -su kirolink
@@ -88,7 +88,7 @@ Also get your own Telegram user ID:
 Clone the repo (to a durable location â€” **not** `/tmp`, which gets wiped on reboot) and run the installer as root:
 
 ```bash
-git clone https://github.com/schnidrc/KiroLink ~/git/KiroLink
+git clone https://github.com/cschnidr/KiroLink ~/git/KiroLink
 cd ~/git/KiroLink
 sudo bash install.sh
 ```
@@ -518,7 +518,7 @@ This project was inspired by [OpenClaw](https://github.com/openclaw/openclaw) â€
 
 ## Disclaimer
 
-This is a personal project by [schnidrc](https://github.com/schnidrc). It is not affiliated with, endorsed by, or related to my employer (Amazon Web Services) in any way.
+This is a personal project by [cschnidr](https://github.com/cschnidr). It is not affiliated with, endorsed by, or related to my employer (Amazon Web Services) in any way.
 
 ## License
 
