@@ -70,12 +70,12 @@ KiroLink/
 | M3: Session Polish | ✅ Done | /cancel, /history, idle timeout, log pruning |
 | M4: Security Hardening | ✅ Done | PIN gate, rate limit, audit log, env check |
 | M5: Packaging | ✅ Done | install.sh, hardened systemd unit, README |
+| M6: Photo Forwarding | ✅ Done | Telegram photos saved to disk, path included in Kiro prompt |
 
 ## Ideas (not in SPEC, not committed)
 
 Just some directions the project could grow in — maybe they inspire a contribution.
 
-- **Photo/screenshot forwarding** — forward Telegram photos to Kiro as image attachments, so you can screenshot an error on your laptop and ask Kiro about it from your phone. Vision-capable models could OCR or reason over the image directly.
 - **Voice/audio messages** — transcribe Telegram voice notes (Whisper, AWS Transcribe, or similar) and feed the text to Kiro. Handy for dictating longer prompts on the go.
 - **File/document forwarding** — send a PDF, log file, or source file as a Telegram attachment and have Kiro read it.
 - **Example agent configurations** — ship a few ready-to-use kiro-cli agent configs (e.g. read-only code reviewer, infra-ops helper, journaling assistant) under an `agents/` directory so users have a starting point for `KIROLINK_KIRO_EXTRA_ARGS=--agent ...`.

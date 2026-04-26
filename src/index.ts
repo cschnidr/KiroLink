@@ -9,6 +9,7 @@ import { runKiro, cleanKiroOutput, type KiroHandle } from "./kiro-headless.js";
 import { ConversationLog } from "./conversation.js";
 import { RateLimiter, PinGate, AuditLog, checkEnvPermissions } from "./security.js";
 import { buildSystemContext } from "./system-context.js";
+import { savePhoto, cleanupOldImages } from "./image-handler.js";
 
 const execFileP = promisify(execFile);
 
@@ -163,6 +164,14 @@ const audit = new AuditLog(auditLogPath);
 
 const maxMessageLength = 4096;
 const fileUploadThreshold = Number(process.env.KIROLINK_FILE_UPLOAD_THRESHOLD ?? 10000);
+
+const imageDir = process.env.KIROLINK_IMAGE_DIR ??
+  path.join(process.env.HOME ?? process.cwd(), ".local/share/kirolink/images");
+const imageMaxAgeHours = Number(process.env.KIROLINK_IMAGE_MAX_AGE_HOURS ?? 24);
+
+// Run image cleanup on startup and every hour.
+cleanupOldImages(imageDir, imageMaxAgeHours);
+setInterval(() => cleanupOldImages(imageDir, imageMaxAgeHours), 3600_000).unref();
 
 const bot = new Bot(token);
 
@@ -420,22 +429,18 @@ bot.command("model", async (ctx) => {
 // Serialize Kiro invocations: one at a time to avoid conflicting tool calls.
 let activeHandle: KiroHandle | null = null;
 
-bot.on("message:text", async (ctx) => {
-  const text = ctx.message.text.trim();
-  if (!text) return;
-  const userId = ctx.from?.id;
-
-  audit.record({ userId, kind: "message", detail: text.length > 200 ? text.slice(0, 200) + "…" : text });
-
+/**
+ * Shared Kiro invocation pipeline used by both text and photo handlers.
+ */
+async function invokeKiro(
+  ctx: import("grammy").Context,
+  userText: string,
+  userId: number | undefined,
+): Promise<void> {
   if (activeHandle) {
     await ctx.reply("Still working on the previous message. Use /cancel if needed.");
     return;
   }
-
-  // Note: conversation is no longer auto-reset on idle. The log is pruned by
-  // turn count (KIROLINK_CONVERSATION_MAX_TURNS), and users can explicitly
-  // reset with /new. KIROLINK_IDLE_TIMEOUT_MINUTES now only controls how long
-  // a PIN-gate unlock remains valid.
 
   const typingTimer = setInterval(() => {
     ctx.replyWithChatAction("typing").catch(() => {});
@@ -443,7 +448,7 @@ bot.on("message:text", async (ctx) => {
   ctx.replyWithChatAction("typing").catch(() => {});
 
   try {
-    conversation.append("user", text);
+    conversation.append("user", userText);
     const systemContext = buildSystemContext({
       extraArgs: kiroExtraArgs,
       cwd: kiroCwd,
@@ -505,6 +510,67 @@ bot.on("message:text", async (ctx) => {
     clearInterval(typingTimer);
     activeHandle = null;
   }
+}
+
+bot.on("message:text", async (ctx) => {
+  const text = ctx.message.text.trim();
+  if (!text) return;
+  const userId = ctx.from?.id;
+  audit.record({ userId, kind: "message", detail: text.length > 200 ? text.slice(0, 200) + "…" : text });
+  await invokeKiro(ctx, text, userId);
+});
+
+// Photo handler: download the image, build a prompt with the file path + caption.
+bot.on("message:photo", async (ctx) => {
+  const userId = ctx.from?.id;
+  const caption = ctx.message.caption?.trim() || "";
+  audit.record({ userId, kind: "photo", detail: caption || "(no caption)" });
+
+  if (activeHandle) {
+    await ctx.reply("Still working on the previous message. Use /cancel if needed.");
+    return;
+  }
+
+  // Telegram sends multiple sizes; pick the largest (last in the array).
+  const photos = ctx.message.photo;
+  const largest = photos[photos.length - 1];
+
+  try {
+    const file = await ctx.api.getFile(largest.file_id);
+    const fileUrl = `https://api.telegram.org/file/bot${token}/${file.file_path}`;
+    const savedPath = await savePhoto(fileUrl, largest.file_id, imageDir);
+
+    console.log(JSON.stringify({
+      level: "info",
+      msg: "photo saved",
+      userId,
+      path: savedPath,
+      size: largest.file_size,
+    }));
+
+    const promptText = caption
+      ? `The user sent a photo saved at ${savedPath}. Read the image file and respond to their message: "${caption}"`
+      : `The user sent a photo saved at ${savedPath}. Read the image file and describe or analyze what you see.`;
+
+    await invokeKiro(ctx, promptText, userId);
+  } catch (err) {
+    console.log(JSON.stringify({ level: "error", msg: "photo download failed", err: String(err) }));
+    await ctx.reply(`Couldn't process the photo: ${String(err).split("\n")[0]}`);
+  }
+});
+
+// Catch-all for unsupported message types (voice, documents, stickers, etc.)
+bot.on("message", async (ctx) => {
+  const type = ctx.message.voice ? "voice messages"
+    : ctx.message.document ? "documents"
+    : ctx.message.video ? "videos"
+    : ctx.message.sticker ? "stickers"
+    : ctx.message.audio ? "audio files"
+    : ctx.message.video_note ? "video notes"
+    : "this message type";
+  await ctx.reply(
+    `Sorry, ${type} aren't supported yet. Send text or a photo.`,
+  );
 });
 
 async function sendReply(ctx: import("grammy").Context, reply: string): Promise<void> {

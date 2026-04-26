@@ -171,6 +171,33 @@ Originally M3 only specified `/new`, `/status`, `/history`, `/cancel`. These wer
 - `/model [name|auto]` — list and select the underlying Kiro model
 - Kiro version + selected model in `/status` output
 
+### M6: Photo/Image Forwarding ✅
+
+Forward Telegram photos to Kiro so vision-capable models can analyze screenshots, diagrams, error messages, etc.
+
+**Approach:** Download the photo to disk, include the file path in the prompt. Kiro CLI's `read` tool can access the saved image. No native `--image` flag exists in headless mode, but "giving the path to the image works" per [kirodotdev/Kiro#5010](https://github.com/kirodotdev/Kiro/issues/5010).
+
+**Implementation:**
+1. Handle `message:photo` events in grammy (photos with or without captions).
+2. Download the highest-resolution photo variant via Telegram's `getFile` API.
+3. Save to `$KIROLINK_DATA_DIR/images/<timestamp>-<file_id>.jpg`.
+4. Build prompt: `"The user sent a photo saved at <path>. Caption: <text or 'Analyze this image.'>"`.
+5. Feed through the existing pipeline (system context, conversation log, Kiro invocation).
+6. Housekeeping: cap the images directory (e.g. delete files older than 24h or when >100 MB).
+
+**Requirements:**
+- Vision-capable model required (Claude Opus/Sonnet; not Haiku, DeepSeek, or other text-only models). System context should warn Kiro if the current model may not support vision.
+- Kiro needs `read` tool trust to access the saved image file.
+- `ReadWritePaths` in the systemd unit must include the images directory (already covered by `/var/lib/kirolink`).
+
+**Config (new env vars):**
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `KIROLINK_IMAGE_DIR` | `~/.local/share/kirolink/images` | Where downloaded photos are saved |
+| `KIROLINK_IMAGE_MAX_AGE_HOURS` | `24` | Auto-delete images older than this (0 = keep forever) |
+
+**Done when:** send a screenshot from phone → Kiro describes/analyzes it and answers the caption question.
+
 ## Risks
 
 1. **Headless mode session boundaries.** Every Kiro invocation is independent; tool-call state and agent caches don't persist. We mitigate with the conversation log, but complex multi-step agent workflows (e.g. "now continue the refactor from earlier") may need explicit context the user wouldn't normally type.

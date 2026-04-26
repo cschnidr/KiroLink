@@ -109,7 +109,7 @@ export class AuditLog {
 
   record(event: {
     userId: number | undefined;
-    kind: "message" | "command" | "denied" | "unlock" | "locked_out";
+    kind: "message" | "photo" | "command" | "denied" | "unlock" | "locked_out";
     detail?: string;
   }): void {
     if (!this.filePath) return;
